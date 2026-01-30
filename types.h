@@ -10,4 +10,4 @@ typedef struct {
 typedef union {
 	u32 u;
 	char c[sizeof(u32) + 1];
-} fourCC; // Mind the endianness
+} fourcc_converter; // Mind the endianness
