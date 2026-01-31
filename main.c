@@ -2,6 +2,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/*
+ * Known issues:
+ * - LIST and RIFF chunks may contain nested chunks
+ * - INFO is a whole nother thing with subsections
+ * - WAVEfmt is not exactly a 4-char code
+ */
+
 /* Takes pointer to chunk, frees it of suffering */
 void free_chunk(chunk *chonk)
 {
@@ -9,7 +16,7 @@ void free_chunk(chunk *chonk)
 	free(chonk);
 }
 
-/* Turn raw 4-char-code into null-terminated string */
+/* Turns raw 4-char-code into null-terminated string */
 char *convert_id(u32 id)
 {
 	fourcc_converter fccc = {.u = id};
@@ -18,7 +25,7 @@ char *convert_id(u32 id)
 	return code;
 }
 
-/* Goes to nth byte, assumes chunk there, retrieves it */
+/* Goes to nth byte, assumes well-behaved chunk there, retrieves it */
 chunk *yoink_chunk(u32 offset, char *path)
 {
 	FILE *f = fopen(path, "rb");
@@ -51,7 +58,7 @@ chunk *yoink_chunk(u32 offset, char *path)
 			__LINE__ - 2, __FILE__);
 		return NULL;
 	}
-	u8 *data = malloc(size); // Lost my heap allocation virginity right here
+	u8 *data = malloc(size);
 	size_t body_read_ret = fread(data, sizeof(u8), size, f);
 	if (body_read_ret != size) {
 		if (feof(f)) {
