@@ -1,12 +1,14 @@
 #include "types.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /*
  * Known issues:
+ * - RIFF payload exceeds file size by about 2 megs (doesn't reach EOF tho?..)
  * - LIST and RIFF chunks may contain nested chunks
  * - INFO is a whole nother thing with subsections
- * - WAVEfmt is not exactly a 4-char code
+ * - WAVEfmt is not exactly a 4-char code (not really being a chunk?..)
  */
 
 /* Takes pointer to chunk, frees it of suffering */
@@ -17,12 +19,11 @@ void free_chunk(chunk *chonk)
 }
 
 /* Turns raw 4-char-code into null-terminated string */
-char *convert_id(u32 id)
+void convert_id(u32 id, char *out)
 {
 	fourcc_converter fccc = {.u = id};
 	fccc.c[4] = '\0';
-	char *code = fccc.c;
-	return code;
+	memcpy(out, &fccc.c, 5);
 }
 
 /* Goes to nth byte, assumes well-behaved chunk there, retrieves it */
@@ -62,17 +63,18 @@ chunk *yoink_chunk(u32 offset, char *path)
 	size_t body_read_ret = fread(data, sizeof(u8), size, f);
 	if (body_read_ret != size) {
 		if (feof(f)) {
-			fprintf(
-			    stdout,
-			    "!!reached EOF in %s while parsing chunk %s!!\n",
-			    path, convert_id(id));
+			char *fcc;
+			convert_id(id, fcc);
+			fprintf(stdout,
+				"!!reached EOF in %s while parsing %s!!\n",
+				path, fcc);
 		} else if (ferror(f)) {
 			perror("ERROR");
 			return NULL;
 		}
 	}
 
-	chunk *out_chunk = malloc(sizeof(u32) * 2 + sizeof(u8 *));
+	chunk *out_chunk = malloc(sizeof(chunk));
 	out_chunk->ckID = id;
 	out_chunk->ckSize = size;
 	out_chunk->ckData = data;
@@ -82,7 +84,8 @@ chunk *yoink_chunk(u32 offset, char *path)
 /* Prints out chunk's fields */
 void printck(chunk *chonk)
 {
-	char *fcc = convert_id(chonk->ckID);
+	char *fcc;
+	convert_id(chonk->ckID, fcc);
 
 	printf("\nID: %s\n", fcc);
 	printf("Size: %d\n", chonk->ckSize);
