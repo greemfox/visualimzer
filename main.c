@@ -1,103 +1,63 @@
 #include "types.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
-/*
- * Known issues:
- * - RIFF payload exceeds file size by about 2 megs (doesn't reach EOF tho?..)
- * - LIST and RIFF chunks may contain nested chunks
- * - INFO is a whole nother thing with subsections
- * - WAVEfmt is not exactly a 4-char code (not really being a chunk?..)
- */
-
-/* Takes pointer to chunk, frees it of suffering */
-void free_chunk(chunk *chonk)
+void fpos_log(FILE *f)
 {
-	free(chonk->ckData);
-	free(chonk);
+	printf("current file position: %lu\n", ftell(f));
 }
 
-/* Turns raw 4-char-code into null-terminated string */
-void convert_id(u32 id, char *out)
-{
-	fourcc_converter fccc = {.u = id};
-	fccc.c[4] = '\0';
-	memcpy(out, &fccc.c, 5);
-}
-
-/* Goes to nth byte, assumes well-behaved chunk there, retrieves it */
-chunk *yoink_chunk(u32 offset, char *path)
+bool parse_wav(char *path)
 {
 	FILE *f = fopen(path, "rb");
-	if (f == NULL) {
-		fprintf(stderr, "ERROR: couldn't read file %s\n", path);
-		return NULL;
+	u32 header_size;
+	u32 format_size;
+	u16 format_tag;
+	u16 channels;
+	u32 samples_per_sec;
+	u32 avg_bytes_per_sec;
+	u16 block_align;
+
+	if (fgetc(f) != 'R' || fgetc(f) != 'I' || fgetc(f) != 'F' ||
+	    fgetc(f) != 'F') {
+		fprintf(stderr, "ERROR: %s is not a RIFF file\n", path);
+		return false;
 	}
 
-	if (fseek(f, offset, SEEK_SET) != 0) {
-		fprintf(stderr, "ERROR: couldn't go to line %d in file %s\n",
-			__LINE__ - 2, __FILE__);
-		return NULL;
-	}
-	u32 header[2];
-	size_t head_read_ret = fread(header, sizeof(u32), 2, f);
-	if (head_read_ret != 2) {
-		if (feof(f)) {
-			fprintf(stderr, "ERROR: unexpected EOF in %s\n", path);
-			return NULL;
-		} else if (ferror(f)) {
-			perror("ERROR");
-			return NULL;
-		}
-	}
-	u32 id = header[0];
-	u32 size = header[1];
+	fread(&header_size, 4, 1, f);
 
-	if (fseek(f, offset + sizeof(header), SEEK_SET) != 0) {
-		fprintf(stderr, "ERROR: couldn't go to line %d in file %s\n",
-			__LINE__ - 2, __FILE__);
-		return NULL;
-	}
-	u8 *data = malloc(size);
-	size_t body_read_ret = fread(data, sizeof(u8), size, f);
-	if (body_read_ret != size) {
-		if (feof(f)) {
-			char *fcc;
-			convert_id(id, fcc);
-			fprintf(stdout,
-				"!!reached EOF in %s while parsing %s!!\n",
-				path, fcc);
-		} else if (ferror(f)) {
-			perror("ERROR");
-			return NULL;
-		}
+	if (fgetc(f) != 'W' || fgetc(f) != 'A' || fgetc(f) != 'V' ||
+	    fgetc(f) != 'E') {
+		fprintf(stderr, "ERROR: %s is not a WAVE file\n", path);
+		return false;
 	}
 
-	chunk *out_chunk = malloc(sizeof(chunk));
-	out_chunk->ckID = id;
-	out_chunk->ckSize = size;
-	out_chunk->ckData = data;
-	return out_chunk;
-}
+	if (fgetc(f) != 'f' || fgetc(f) != 'm' || fgetc(f) != 't' ||
+	    fgetc(f) != ' ') {
+		fprintf(stderr, "ERROR: %s is missing the fmt chunk\n", path);
+		return false;
+	}
 
-/* Prints out chunk's fields */
-void printck(chunk *chonk)
-{
-	char *fcc;
-	convert_id(chonk->ckID, fcc);
+	fread(&format_size, 4, 1, f);
+	fread(&format_tag, 2, 1, f);
+	fread(&channels, 2, 1, f);
+	fread(&samples_per_sec, 4, 1, f);
+	fread(&avg_bytes_per_sec, 4, 1, f);
+	fread(&block_align, 2, 1, f);
 
-	printf("\nID: %s\n", fcc);
-	printf("Size: %d\n", chonk->ckSize);
-	printf("Data: %X %X %X ...\n", *(chonk->ckData), *(chonk->ckData + 1),
-	       *(chonk->ckData + 2));
+	printf("Header size: %i bytes\n", header_size);
+	printf("Format size: %i bytes\n", format_size);
+	printf("Format tag: %04x\n", format_tag);
+	printf("Channels: %i\n", channels);
+	printf("Samples per sec: %i Hz\n", samples_per_sec);
+	printf("Avg bytes per sec: %i bytes\n", avg_bytes_per_sec);
+	printf("Block align: %i bytes\n", block_align);
+
+	return true;
 }
 
 int main(void)
 {
-	chunk *ck = yoink_chunk(0, "test.wav");
-	chunk *ck2 = yoink_chunk(8, "test.wav");
-	printck(ck);
-	printck(ck2);
+	parse_wav("test.wav");
 	return EXIT_SUCCESS;
 }
