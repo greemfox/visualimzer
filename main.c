@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-bool parse_wav(char *path)
+bool extract_wav_metadata(char *path, wav_metadata *md)
 {
 	FILE *f = fopen(path, "rb");
 	u32 file_size;
@@ -14,73 +14,72 @@ bool parse_wav(char *path)
 	u16 block_align;
 	u16 bits_per_sample;
 	u32 info_size;
+	u64 where_data_at;
 
 	if (fgetc(f) != 'R' || fgetc(f) != 'I' || fgetc(f) != 'F' ||
 	    fgetc(f) != 'F') {
 		fprintf(stderr, "ERROR: %s is not a RIFF file\n", path);
 		return false;
 	}
-
 	fread(&file_size, 4, 1, f);
-	printf("File size: %i bytes\n", file_size);
-
 	if (fgetc(f) != 'W' || fgetc(f) != 'A' || fgetc(f) != 'V' ||
 	    fgetc(f) != 'E') {
 		fprintf(stderr, "ERROR: %s is not a WAVE file\n", path);
 		return false;
 	}
-
 	if (fgetc(f) != 'f' || fgetc(f) != 'm' || fgetc(f) != 't' ||
 	    fgetc(f) != ' ') {
 		fprintf(stderr, "ERROR: couldn't find the fmt chunk in %s\n",
 			path);
 		return false;
 	}
-
 	fread(&format_size, 4, 1, f);
-	printf("Format size: %i bytes\n", format_size);
-
 	fread(&format_tag, 2, 1, f);
-	printf("Format tag: %04x\n", format_tag);
 	if (format_tag != 1) {
 		fprintf(stderr, "SORRY! IBM formats are not supported\n");
 		return false;
 	}
-
 	fread(&channels, 2, 1, f);
-	printf("Channels: %i\n", channels);
-
 	fread(&samples_per_sec, 4, 1, f);
-	printf("Samples per sec: %i Hz\n", samples_per_sec);
-
 	fread(&avg_bytes_per_sec, 4, 1, f);
-	printf("Avg bytes per sec: %i bytes\n", avg_bytes_per_sec);
-
 	fread(&block_align, 2, 1, f);
-	printf("Block alignment: %i bytes\n", block_align);
-
 	fread(&bits_per_sample, 2, 1, f);
-	printf("Bits per sample: %i\n", bits_per_sample);
-
-	fseek(f, 4, SEEK_CUR);
+	fseek(f, 4, SEEK_CUR); // Skipping LIST fourcc
 	fread(&info_size, 4, 1, f);
-	printf("Info size: %i bytes\n", info_size);
-
-	fseek(f, info_size, SEEK_CUR);
-	printf("Skipping info...\n");
-
+	fseek(f, info_size, SEEK_CUR); // Skipping info
 	if (fgetc(f) != 'd' || fgetc(f) != 'a' || fgetc(f) != 't' ||
 	    fgetc(f) != 'a') {
 		fprintf(stderr, "ERROR: couldn't find the data chunk in %s\n",
 			path);
 		return false;
 	}
+	where_data_at = ftell(f);
 
+	*md = (wav_metadata){
+	    file_size,	 format_size,	  format_tag,
+	    channels,	 samples_per_sec, avg_bytes_per_sec,
+	    block_align, bits_per_sample, where_data_at,
+	};
 	return true;
+}
+
+void printout_wav_metadata(wav_metadata *md)
+{
+	printf("File size: %i bytes\n", md->fileSize);
+	printf("Format size: %i bytes\n", md->formatSize);
+	printf("Format tag: %04x\n", md->formatTag);
+	printf("Channels: %i\n", md->channels);
+	printf("Samples per sec: %i Hz\n", md->samplesPerSec);
+	printf("Avg bytes per sec: %i bytes\n", md->avgBytesPerSec);
+	printf("Block alignment: %i bytes\n", md->blockAlign);
+	printf("Bits per sample: %i\n", md->bitsPerSample);
+	printf("Actual data starts after: %llu bytes\n", md->whereDataAt);
 }
 
 int main(void)
 {
-	parse_wav("test.wav");
+	wav_metadata test_md;
+	extract_wav_metadata("test.wav", &test_md);
+	printout_wav_metadata(&test_md);
 	return EXIT_SUCCESS;
 }
