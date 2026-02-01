@@ -76,10 +76,15 @@ void printout_wav_metadata(wav_metadata *md)
 	printf("Actual data starts after: %llu bytes\n", md->whereDataAt);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
-	wav_metadata test_md;
-	extract_wav_metadata("test.wav", &test_md);
-	printout_wav_metadata(&test_md);
+	if (argc == 1) {
+		printf("Usage: vmzr [.WAV FILE PATH] ...\n");
+	}
+	for (int i = 1; i < argc; i++) {
+		wav_metadata md;
+		extract_wav_metadata(argv[i], &md);
+		printout_wav_metadata(&md);
+	}
 	return EXIT_SUCCESS;
 }
