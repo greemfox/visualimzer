@@ -12,37 +12,41 @@ bool extract_metadata(char *path, wav_metadata *md)
 	u32 avg_bytes_per_sec;
 	u16 block_align;
 	u16 bits_per_sample;
-	u32 info_size;
 	long where_data_at;
 
 	FILE *f = fopen(path, "rb");
 	if (fgetc(f) != 'R' || fgetc(f) != 'I' || fgetc(f) != 'F' ||
 	    fgetc(f) != 'F') {
-		char what[5];
-		what[4] = '\0';
+		char what[4];
 		fseek(f, 0, SEEK_SET);
 		fread(what, 4, 1, f);
-		fprintf(stderr, "ERROR in %s: expected RIFF, found %s\n", path,
-			what);
+		fprintf(stderr,
+			"ERROR in %s: expected 52 49 46 46 (RIFF), found "
+			"%02X %02X %02X %02X\n",
+			path, what[0], what[1], what[2], what[3]);
 		return false;
 	}
 	fread(&file_size, 4, 1, f);
+	file_size += 8; // ACCOUNTING FOR HEADER & POSSIBLE PADDING
+	if (file_size % 2 != 0) {
+		file_size++;
+	}
+
 	if (fgetc(f) != 'W' || fgetc(f) != 'A' || fgetc(f) != 'V' ||
 	    fgetc(f) != 'E') {
-		fprintf(stderr, "ERROR: %s is not a WAVE file\n", path);
+		fprintf(stderr, "ERROR in %s: not a WAVE file\n", path);
 		return false;
 	}
 	if (fgetc(f) != 'f' || fgetc(f) != 'm' || fgetc(f) != 't' ||
 	    fgetc(f) != ' ') {
-		fprintf(stderr, "ERROR: couldn't find the fmt chunk in %s\n",
+		fprintf(stderr, "ERROR in %s: couldn't find the fmt chunk\n",
 			path);
 		return false;
 	}
 	fread(&format_size, 4, 1, f);
 	fread(&format_tag, 2, 1, f);
 	if (format_tag != 1) {
-		fprintf(stderr,
-			"Can't parse %s: IBM formats are not supported\n",
+		fprintf(stderr, "ERROR in %s: IBM formats are not supported\n",
 			path);
 		return false;
 	}
@@ -51,16 +55,32 @@ bool extract_metadata(char *path, wav_metadata *md)
 	fread(&avg_bytes_per_sec, 4, 1, f);
 	fread(&block_align, 2, 1, f);
 	fread(&bits_per_sample, 2, 1, f);
-	fseek(f, 4, SEEK_CUR); // Skipping LIST fourcc
-	fread(&info_size, 4, 1, f);
-	fseek(f, info_size, SEEK_CUR); // Skipping info
+
+	u8 list_maybe[4];
+	u32 info_skip = -4; // To go back if none is found
+	fread(list_maybe, 4, 1, f);
+	if (list_maybe[0] == 'L' && list_maybe[1] == 'I' &&
+	    list_maybe[2] == 'S' && list_maybe[3] == 'T') {
+		fread(&info_skip, 4, 1, f);
+	}
+	fseek(f, info_skip, SEEK_CUR);
+
 	if (fgetc(f) != 'd' || fgetc(f) != 'a' || fgetc(f) != 't' ||
 	    fgetc(f) != 'a') {
-		fprintf(stderr, "ERROR: couldn't find the data chunk in %s\n",
-			path);
+		char what[4];
+		fseek(f, -4, SEEK_CUR);
+		fread(what, 4, 1, f);
+		fprintf(stderr,
+			"ERROR in %s: expected 64 61 74 61 (data), found "
+			"%02X %02X %02X %02X\n",
+			path, what[0], what[1], what[2], what[3]);
 		return false;
 	}
-	where_data_at = ftell(f);
+	/*
+	 * HACK: idk why I have to explicitly skip 'data' atp
+	 *       and whether this is the place to do it
+	 */
+	where_data_at = ftell(f) + 4;
 
 	*md = (wav_metadata){
 	    file_size,	 format_size,	  format_tag,
@@ -72,21 +92,48 @@ bool extract_metadata(char *path, wav_metadata *md)
 
 void printmd(wav_metadata *md)
 {
-	printf("File size: %i bytes\n", md->fileSize);
-	printf("Format size: %i bytes\n", md->formatSize);
+	printf("File size: %u bytes\n", md->fileSize);
+	printf("Format size: %u bytes\n", md->formatSize);
 	printf("Format tag: %04x\n", md->formatTag);
-	printf("Channels: %i\n", md->channels);
-	printf("Samples per sec: %i Hz\n", md->samplesPerSec);
-	printf("Avg bytes per sec: %i bytes\n", md->avgBytesPerSec);
-	printf("Block alignment: %i bytes\n", md->blockAlign);
-	printf("Bits per sample: %i\n", md->bitsPerSample);
-	printf("Actual data starts after: %li bytes\n", md->whereDataAt);
+	printf("Channels: %u\n", md->channels);
+	printf("Samples per sec: %u Hz\n", md->samplesPerSec);
+	printf("Avg bytes per sec: %u bytes\n", md->avgBytesPerSec);
+	printf("Block alignment: %u bytes\n", md->blockAlign);
+	printf("Bits per sample: %u\n", md->bitsPerSample);
+	printf("Actual data starts after: %li bytes\n\n", md->whereDataAt);
 }
 
-/* Bit of a questionable decision to open the file both times ngl */
-void parse_data(char *path, long offset, wav_metadata *md)
+sample_s16 *yoink_data(char *path, wav_metadata *md)
 {
-	return;
+	if (md->bitsPerSample != 16 || md->channels != 2) {
+		fprintf(stderr, "We only do 16-bit stereo here, sorry\n");
+		return NULL;
+	}
+
+	long data_size = md->fileSize - md->whereDataAt;
+	/*
+	 * Might wanna free these manually at some point
+	 * if you plan to process whole playlists
+	 */
+	sample_s16 *samples = malloc(data_size);
+	int sample_count = data_size / 4;
+
+	FILE *f = fopen(path, "rb");
+	fseek(f, md->whereDataAt, SEEK_SET);
+	fread(samples, sizeof(sample_s16), sample_count, f);
+	return samples;
+}
+
+void printpcm(int offset, int count, sample_s16 *dataptr)
+{
+	sample_s16 *start = dataptr + offset;
+	for (int i = 0; i < count; i++) {
+		/* i scales with sizeof(sample_s16) automagically */
+		sample_s16 s = *(start + i);
+		printf(" Sample %i\n", offset + i + 1);
+		printf("Channel 0: %i\n", s.chan0);
+		printf("Channel 1: %i\n", s.chan1);
+	}
 }
 
 int main(int argc, char **argv)
@@ -95,9 +142,14 @@ int main(int argc, char **argv)
 		printf("Usage: vmzr [.WAV FILE PATH] ...\n");
 	}
 	for (int i = 1; i < argc; i++) {
+		char *path = argv[i];
 		wav_metadata md;
-		extract_metadata(argv[i], &md);
-		printmd(&md);
+		if (extract_metadata(path, &md)) {
+			printmd(&md);
+		}
+
+		sample_s16 *dataptr = yoink_data(path, &md);
+		printpcm(12000, 5, dataptr);
 	}
 	return EXIT_SUCCESS;
 }

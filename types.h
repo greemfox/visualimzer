@@ -6,7 +6,6 @@ typedef uint32_t u32;
 
 typedef int16_t i16;
 
-/* I don't expect all of it to be useful but it's nice to look at*/
 typedef struct {
 	u32 fileSize;
 	u32 formatSize;
@@ -16,5 +15,10 @@ typedef struct {
 	u32 avgBytesPerSec;
 	u16 blockAlign;
 	u16 bitsPerSample;
-	long whereDataAt;
+	long whereDataAt; // Offset in bytes; long because ftell
 } wav_metadata;
+
+typedef struct {
+	i16 chan0;
+	i16 chan1;
+} sample_s16;
