@@ -2,9 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-bool extract_wav_metadata(char *path, wav_metadata *md)
+bool extract_metadata(char *path, wav_metadata *md)
 {
-	FILE *f = fopen(path, "rb");
 	u32 file_size;
 	u32 format_size;
 	u16 format_tag;
@@ -14,11 +13,17 @@ bool extract_wav_metadata(char *path, wav_metadata *md)
 	u16 block_align;
 	u16 bits_per_sample;
 	u32 info_size;
-	u64 where_data_at;
+	long where_data_at;
 
+	FILE *f = fopen(path, "rb");
 	if (fgetc(f) != 'R' || fgetc(f) != 'I' || fgetc(f) != 'F' ||
 	    fgetc(f) != 'F') {
-		fprintf(stderr, "ERROR: %s is not a RIFF file\n", path);
+		char what[5];
+		what[4] = '\0';
+		fseek(f, 0, SEEK_SET);
+		fread(what, 4, 1, f);
+		fprintf(stderr, "ERROR in %s: expected RIFF, found %s\n", path,
+			what);
 		return false;
 	}
 	fread(&file_size, 4, 1, f);
@@ -36,7 +41,9 @@ bool extract_wav_metadata(char *path, wav_metadata *md)
 	fread(&format_size, 4, 1, f);
 	fread(&format_tag, 2, 1, f);
 	if (format_tag != 1) {
-		fprintf(stderr, "SORRY! IBM formats are not supported\n");
+		fprintf(stderr,
+			"Can't parse %s: IBM formats are not supported\n",
+			path);
 		return false;
 	}
 	fread(&channels, 2, 1, f);
@@ -63,7 +70,7 @@ bool extract_wav_metadata(char *path, wav_metadata *md)
 	return true;
 }
 
-void printout_wav_metadata(wav_metadata *md)
+void printmd(wav_metadata *md)
 {
 	printf("File size: %i bytes\n", md->fileSize);
 	printf("Format size: %i bytes\n", md->formatSize);
@@ -73,7 +80,13 @@ void printout_wav_metadata(wav_metadata *md)
 	printf("Avg bytes per sec: %i bytes\n", md->avgBytesPerSec);
 	printf("Block alignment: %i bytes\n", md->blockAlign);
 	printf("Bits per sample: %i\n", md->bitsPerSample);
-	printf("Actual data starts after: %llu bytes\n", md->whereDataAt);
+	printf("Actual data starts after: %li bytes\n", md->whereDataAt);
+}
+
+/* Bit of a questionable decision to open the file both times ngl */
+void parse_data(char *path, long offset, wav_metadata *md)
+{
+	return;
 }
 
 int main(int argc, char **argv)
@@ -83,8 +96,8 @@ int main(int argc, char **argv)
 	}
 	for (int i = 1; i < argc; i++) {
 		wav_metadata md;
-		extract_wav_metadata(argv[i], &md);
-		printout_wav_metadata(&md);
+		extract_metadata(argv[i], &md);
+		printmd(&md);
 	}
 	return EXIT_SUCCESS;
 }
