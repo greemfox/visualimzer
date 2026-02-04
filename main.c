@@ -20,9 +20,7 @@ bool extract_metadata(char *path, wav_metadata *md)
 		char what[4];
 		fseek(f, 0, SEEK_SET);
 		fread(what, 4, 1, f);
-		fprintf(stderr,
-			"ERROR in %s: expected 52 49 46 46 (RIFF), found "
-			"%02X %02X %02X %02X\n",
+		fprintf(stderr, "ERROR in %s: expected RIFF, found %c%c%c%c\n",
 			path, what[0], what[1], what[2], what[3]);
 		return false;
 	}
@@ -67,13 +65,8 @@ bool extract_metadata(char *path, wav_metadata *md)
 
 	if (fgetc(f) != 'd' || fgetc(f) != 'a' || fgetc(f) != 't' ||
 	    fgetc(f) != 'a') {
-		char what[4];
-		fseek(f, -4, SEEK_CUR);
-		fread(what, 4, 1, f);
-		fprintf(stderr,
-			"ERROR in %s: expected 64 61 74 61 (data), found "
-			"%02X %02X %02X %02X\n",
-			path, what[0], what[1], what[2], what[3]);
+		fprintf(stderr, "ERROR in %s: couldn't find the data chunk\n",
+			path);
 		return false;
 	}
 	/*
@@ -124,11 +117,10 @@ sample_s16 *yoink_data(char *path, wav_metadata *md)
 	return samples;
 }
 
-void printpcm(int offset, int count, sample_s16 *dataptr)
+void printpcm(int offset, int count, sample_s16 *data)
 {
-	sample_s16 *start = dataptr + offset;
+	sample_s16 *start = data + offset;
 	for (int i = 0; i < count; i++) {
-		/* i scales with sizeof(sample_s16) automagically */
 		sample_s16 s = *(start + i);
 		printf(" Sample %i\n", offset + i + 1);
 		printf("Channel 0: %i\n", s.chan0);
@@ -147,9 +139,6 @@ int main(int argc, char **argv)
 		if (extract_metadata(path, &md)) {
 			printmd(&md);
 		}
-
-		sample_s16 *dataptr = yoink_data(path, &md);
-		printpcm(12000, 5, dataptr);
 	}
 	return EXIT_SUCCESS;
 }
