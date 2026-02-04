@@ -138,6 +138,14 @@ int main(int argc, char **argv)
 		wav_metadata md;
 		if (extract_metadata(path, &md)) {
 			printmd(&md);
+
+			sample_s16 *data = yoink_data(path, &md);
+			/*
+			 * I'm thinking bars
+			 * Take slices of 30 ms or so and spread them out a lil
+			 * Might wanna look into something like sdl for a change
+			 */
+			free(data);
 		}
 	}
 	return EXIT_SUCCESS;
