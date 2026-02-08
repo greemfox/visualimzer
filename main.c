@@ -1,4 +1,5 @@
 #include "types.h"
+#include <raylib.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -69,10 +70,6 @@ bool extract_metadata(char *path, wav_metadata *md)
 			path);
 		return false;
 	}
-	/*
-	 * HACK: idk why I have to explicitly skip 'data' atp
-	 *       and whether this is the place to do it
-	 */
 	where_data_at = ftell(f) + 4;
 
 	*md = (wav_metadata){
@@ -93,10 +90,10 @@ void printmd(wav_metadata *md)
 	printf("Avg bytes per sec: %u bytes\n", md->avgBytesPerSec);
 	printf("Block alignment: %u bytes\n", md->blockAlign);
 	printf("Bits per sample: %u\n", md->bitsPerSample);
-	printf("Actual data starts after: %li bytes\n\n", md->whereDataAt);
+	printf("Actual data starts after: %li bytes\n", md->whereDataAt);
 }
 
-sample_s16 *yoink_data(char *path, wav_metadata *md)
+sample_s16 *yoink_samples(char *path, wav_metadata *md)
 {
 	if (md->bitsPerSample != 16 || md->channels != 2) {
 		fprintf(stderr, "We only do 16-bit stereo here, sorry\n");
@@ -109,7 +106,9 @@ sample_s16 *yoink_data(char *path, wav_metadata *md)
 	 * if you plan to process whole playlists
 	 */
 	sample_s16 *samples = malloc(data_size);
-	int sample_count = data_size / 4;
+	int sample_count =
+	    data_size / 4; // Will prolly have to calculate it again
+			   // not sure if it's worth optimizing tho
 
 	FILE *f = fopen(path, "rb");
 	fseek(f, md->whereDataAt, SEEK_SET);
@@ -128,6 +127,17 @@ void printpcm(int offset, int count, sample_s16 *data)
 	}
 }
 
+void do_the_thing(sample_s16 *samples)
+{
+	InitWindow(420, 69, "test");
+	while (!WindowShouldClose()) {
+		BeginDrawing();
+		ClearBackground(RED);
+		EndDrawing();
+	}
+	CloseWindow();
+}
+
 int main(int argc, char **argv)
 {
 	if (argc == 1) {
@@ -139,13 +149,9 @@ int main(int argc, char **argv)
 		if (extract_metadata(path, &md)) {
 			printmd(&md);
 
-			sample_s16 *data = yoink_data(path, &md);
-			/*
-			 * I'm thinking bars
-			 * Take slices of 30 ms or so and spread them out a lil
-			 * Might wanna look into something like sdl for a change
-			 */
-			free(data);
+			sample_s16 *samples = yoink_samples(path, &md);
+			do_the_thing(samples);
+			free(samples);
 		}
 	}
 	return EXIT_SUCCESS;
