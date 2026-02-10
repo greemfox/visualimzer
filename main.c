@@ -1,7 +1,9 @@
 #include "types.h"
+#include <math.h>
 #include <raylib.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 bool extract_metadata(char *path, wav_metadata *md)
 {
@@ -93,7 +95,7 @@ void printmd(wav_metadata *md)
 	printf("Actual data starts after: %li bytes\n", md->whereDataAt);
 }
 
-sample_s16 *yoink_samples(char *path, wav_metadata *md)
+sample_s16 *yoink_samples(char *path, wav_metadata *md, int *count_out)
 {
 	if (md->bitsPerSample != 16 || md->channels != 2) {
 		fprintf(stderr, "We only do 16-bit stereo here, sorry\n");
@@ -101,14 +103,9 @@ sample_s16 *yoink_samples(char *path, wav_metadata *md)
 	}
 
 	long data_size = md->fileSize - md->whereDataAt;
-	/*
-	 * Might wanna free these manually at some point
-	 * if you plan to process whole playlists
-	 */
 	sample_s16 *samples = malloc(data_size);
-	int sample_count =
-	    data_size / 4; // Will prolly have to calculate it again
-			   // not sure if it's worth optimizing tho
+	int sample_count = data_size / 4;
+	*count_out = sample_count;
 
 	FILE *f = fopen(path, "rb");
 	fseek(f, md->whereDataAt, SEEK_SET);
@@ -127,13 +124,20 @@ void printpcm(int offset, int count, sample_s16 *data)
 	}
 }
 
-void do_the_thing(sample_s16 *samples)
+void do_the_thing(sample_s16 *samples, int count)
 {
-	InitWindow(420, 69, "test");
+	InitWindow(510, 510, "test");
+	Color couleur = {0, 0, 0, 255};
 	while (!WindowShouldClose()) {
-		BeginDrawing();
-		ClearBackground(RED);
-		EndDrawing();
+		for (int i = 0; i < count; i++) {
+			sample_s16 s = samples[i];
+			couleur.r = 255 * sin(time(NULL));
+			couleur.g = 255 * s.chan0 / 65536 + .5;
+			couleur.b = 255 * s.chan1 / 65536 + .5;
+			BeginDrawing();
+			ClearBackground(couleur);
+			EndDrawing();
+		}
 	}
 	CloseWindow();
 }
@@ -147,11 +151,14 @@ int main(int argc, char **argv)
 		char *path = argv[i];
 		wav_metadata md;
 		if (extract_metadata(path, &md)) {
-			printmd(&md);
+			int scnt;
+			sample_s16 *samples = yoink_samples(path, &md, &scnt);
 
-			sample_s16 *samples = yoink_samples(path, &md);
-			do_the_thing(samples);
+			printmd(&md);
+			do_the_thing(samples, scnt);
 			free(samples);
+		} else {
+			return EXIT_FAILURE;
 		}
 	}
 	return EXIT_SUCCESS;
