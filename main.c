@@ -95,7 +95,7 @@ void printmd(wav_metadata *md)
 	printf("Actual data starts after: %li bytes\n", md->whereDataAt);
 }
 
-sample_s16 *yoink_samples(char *path, wav_metadata *md, int *count_out)
+sample_s16 *yoink_samples(char *path, wav_metadata *md)
 {
 	if (md->bitsPerSample != 16 || md->channels != 2) {
 		fprintf(stderr, "We only do 16-bit stereo here, sorry\n");
@@ -105,7 +105,6 @@ sample_s16 *yoink_samples(char *path, wav_metadata *md, int *count_out)
 	long data_size = md->fileSize - md->whereDataAt;
 	sample_s16 *samples = malloc(data_size);
 	int sample_count = data_size / 4;
-	*count_out = sample_count;
 
 	FILE *f = fopen(path, "rb");
 	fseek(f, md->whereDataAt, SEEK_SET);
@@ -124,12 +123,20 @@ void printpcm(int offset, int count, sample_s16 *data)
 	}
 }
 
-void do_the_thing(sample_s16 *samples, int count)
+void do_the_thing(sample_s16 *samples, wav_metadata *md)
 {
 	InitWindow(510, 510, "test");
 	Color couleur = {0, 0, 0, 255};
-	while (!WindowShouldClose()) {
-		for (int i = 0; i < count; i++) {
+	int sample_count = (md->fileSize - md->whereDataAt) / 4;
+	int samples_per_tick = md->samplesPerSec / 50; // A tick being 20ms
+	while (
+	    !WindowShouldClose()) { // FIXME: Can't actually close it from there
+		for (int i = 0; i < sample_count; i += samples_per_tick) {
+			/*
+			 * TODO:
+			 * [ ] Synchronize
+			 * [ ] Visualize
+			 */
 			sample_s16 s = samples[i];
 			couleur.r = 255 * sin(time(NULL));
 			couleur.g = 255 * s.chan0 / 65536 + .5;
@@ -138,8 +145,8 @@ void do_the_thing(sample_s16 *samples, int count)
 			ClearBackground(couleur);
 			EndDrawing();
 		}
+		CloseWindow();
 	}
-	CloseWindow();
 }
 
 int main(int argc, char **argv)
@@ -151,11 +158,10 @@ int main(int argc, char **argv)
 		char *path = argv[i];
 		wav_metadata md;
 		if (extract_metadata(path, &md)) {
-			int scnt;
-			sample_s16 *samples = yoink_samples(path, &md, &scnt);
+			sample_s16 *samples = yoink_samples(path, &md);
 
 			printmd(&md);
-			do_the_thing(samples, scnt);
+			do_the_thing(samples, &md);
 			free(samples);
 		} else {
 			return EXIT_FAILURE;
