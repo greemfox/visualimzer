@@ -128,19 +128,12 @@ void do_the_thing(sample_s16 *samples, wav_metadata *md)
 	InitWindow(510, 510, "test");
 	Color couleur = {0, 0, 0, 255};
 	int sample_count = (md->fileSize - md->whereDataAt) / 4;
-	int samples_per_tick = md->samplesPerSec / 50; // A tick being 20ms
-	while (
-	    !WindowShouldClose()) { // FIXME: Can't actually close it from there
-		for (int i = 0; i < sample_count; i += samples_per_tick) {
-			/*
-			 * TODO:
-			 * [ ] Synchronize
-			 * [ ] Visualize
-			 */
+	while (!WindowShouldClose()) {
+		for (int i = 0; i < sample_count; i++) {
 			sample_s16 s = samples[i];
 			couleur.r = 255 * sin(time(NULL));
-			couleur.g = 255 * s.chan0 / 65536 + .5;
-			couleur.b = 255 * s.chan1 / 65536 + .5;
+			couleur.g = 255 * s.chan0 / 65536. + .5;
+			couleur.b = 255 * s.chan1 / 65536. + .5;
 			BeginDrawing();
 			ClearBackground(couleur);
 			EndDrawing();
