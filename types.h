@@ -18,7 +18,7 @@ typedef struct {
 	long whereDataAt; // Offset in bytes; long because ftell
 } wav_metadata;
 
-typedef struct {
+typedef struct __attribute__((packed)) {
 	i16 chan0;
 	i16 chan1;
 } sample_s16;

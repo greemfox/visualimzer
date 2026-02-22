@@ -1,9 +1,6 @@
 #include "types.h"
-#include <math.h>
-#include <raylib.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
 
 bool extract_metadata(char *path, wav_metadata *md)
 {
@@ -125,21 +122,10 @@ void printpcm(int offset, int count, sample_s16 *data)
 
 void do_the_thing(sample_s16 *samples, wav_metadata *md)
 {
-	InitWindow(510, 510, "test");
-	Color couleur = {0, 0, 0, 255};
-	int sample_count = (md->fileSize - md->whereDataAt) / 4;
-	while (!WindowShouldClose()) {
-		for (int i = 0; i < sample_count; i++) {
-			sample_s16 s = samples[i];
-			couleur.r = 255 * sin(time(NULL));
-			couleur.g = 255 * s.chan0 / 65536. + .5;
-			couleur.b = 255 * s.chan1 / 65536. + .5;
-			BeginDrawing();
-			ClearBackground(couleur);
-			EndDrawing();
-		}
-		CloseWindow();
-	}
+	/*
+	 * TODO: come back when I'm not as clueless about...
+	 * signal processing and stuff
+	 */
 }
 
 int main(int argc, char **argv)
